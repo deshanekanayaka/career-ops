@@ -1,0 +1,157 @@
+%-------------------------
+% Career-Ops LaTeX CV Template — "clean" (A4, ATS-safe vector fonts)
+%------------------------
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Preamble %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[a4paper,11pt]{article}
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\input{glyphtounicode}
+\pdfgentounicode=1
+
+% fullpage's default margin is not 0.5in; geometry sets the exact figure
+% without touching anything above. Appended, not substituted — the packages
+% and their order above are unchanged.
+\usepackage[a4paper,margin=0.5in]{geometry}
+
+% \pdfgentounicode=1 above is a pdfTeX-only primitive: it does nothing under
+% tectonic (XeTeX-based), and microtype's \DisableLigatures — the usual
+% engine-agnostic fix — is ALSO pdfTeX-only and hard-errors under XeTeX. The
+% actual fix for ligature-safe text extraction under every engine lives in
+% lib/latex-escape.mjs's escapeLatex(): it breaks every f+{f,i,l} pair with
+% an empty TeX group before the text ever reaches this template, which is
+% engine-independent because it acts at the TeX lexer level, not the font.
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting — ONE command, nothing else controls heading spacing.
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Commands  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\resumeItem}[1]{
+  \item\small{#1 \vspace{-2pt}}
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-3pt}
+}
+
+% 2-argument title/date row, matching the shared JS renderer's contract
+% (build-cv-latex.mjs emits exactly {name}{dates} here for every .tex
+% template — base, CJK, or a named pack). A project's tech-stack line and its
+% visible link line are appended as free text by that same function right
+% after this call, inside the same \item — not passed through the macro's
+% arguments, so this macro never needs to accept more than 2.
+\newcommand{\resumeProjectHeading}[2]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-2pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[topsep=4pt, label=\textbullet]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{2pt}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Heading  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\begin{center}
+    \textbf{\Huge \scshape {{NAME}}} \\ \vspace{2pt}
+    {{TITLE_LINE}}\small {{PHONE}} $|$
+    \href{{{EMAIL_URL}}}{\underline{{{EMAIL_DISPLAY}}}} $|$
+    {{LOCATION}} \\ \vspace{1pt}
+    \small \href{{{LINKEDIN_URL}}}{\underline{{{LINKEDIN_DISPLAY}}}} $|$
+    \href{{{GITHUB_URL}}}{\underline{{{GITHUB_DISPLAY}}}} $|$
+    \href{{{PORTFOLIO_URL}}}{\underline{{{PORTFOLIO_DISPLAY}}}}
+\end{center}
+
+% Section order for this template: Summary, Work Experience, Projects,
+% Education, Technical Skills. Candidate's explicit choice (2026-09-14),
+% reversing the earlier Education-first order: with a current role and two
+% substantial projects on the page, the evidence of doing the work outranks the
+% credential, and a hiring manager reads the bullets first. Markers carry no
+% ordering meaning of their own, so moving these blocks is purely a matter of
+% physical order in this file.
+%
+% The Additional block (merged certifications + awards line) was removed: the
+% entries it carried were an unglossed internal university award and a 2024
+% intro certificate, both superseded by the rest of the page. buildAdditional()
+% still runs and its ADDITIONAL key is simply unused — build-cv-latex.mjs only
+% fails on placeholders left UNRESOLVED in the template, never on unused keys.
+% Restore by pasting back a \section{Additional} block holding the ADDITIONAL
+% placeholder. Written without the braces on purpose: substitution is a plain
+% text replace that does not know what a LaTeX comment is, so a real placeholder
+% here would have the built block spliced in after the `%` and every line of it
+% past the first would escape the comment into live document body.
+
+% The Summary block is a single substitution, not a marker-delimited section:
+% buildSummary() emits the \section heading and the text together, or an empty
+% string, so a blank summary leaves no bare header. Do not wrap it in a
+% `%%%% ... %%%%` banner — that is the shape stripEmptySections() looks for, and
+% summary is a scalar it cannot evaluate.
+{{SUMMARY}}
+
+%%%% Experience %%%%
+\section{Work Experience}
+  \resumeSubHeadingListStart
+{{EXPERIENCE}}
+  \resumeSubHeadingListEnd
+
+%%%% PROJECTS %%%%
+% "Projects", not "Personal Projects": the entries here include an
+% examiner-reviewed rebuild and a delivery to a live client, and filing those
+% under "personal" reads them down to hobby work.
+\section{Projects}
+\resumeSubHeadingListStart
+{{PROJECTS}}
+\resumeSubHeadingListEnd
+
+%%%% Education %%%%
+\section{Education}
+  \resumeSubHeadingListStart
+{{EDUCATION}}
+  \resumeSubHeadingListEnd
+
+%%%% Technical Skills %%%%
+\section{Technical Skills}
+% No extra \vspace here, unlike the base template's Skills block: the
+% \titleformat above already applies \vspace{-5pt} after every section's
+% rule. Stacking a second negative vspace pulled this section's first line
+% up into its own rule (verified visually -- the two overlapped).
+\begin{itemize}
+[leftmargin=0.15in, label={}]\small{\item{
+{{SKILLS}}
+}}
+\end{itemize}
+
+%%%% END %%%%
+
+\end{document}

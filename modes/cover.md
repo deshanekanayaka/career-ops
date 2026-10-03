@@ -1,5 +1,14 @@
 # Mode: cover — Cover Letter Generator
 
+**Check `modes/_custom.md` -> "Cover letter generation" before running Steps
+3-8 below.** If that section exists, it is the authoritative structure and
+gating for the letter — its Step 0 personal-story prompt and fixed structure
+REPLACE the company-research presentation (Step 3), keyword-list approval
+(Step 4), gap-detection negotiation (Step 5), and four-mandatory-prompts gate
+(Step 6) below, word count included. Still use Steps 0-1, the fact validator,
+the JSON payload / `generate-cover-letter.mjs` call, and slug mode from this
+file. If `modes/_custom.md` has no such section, follow this file as written.
+
 Generates a tailored cover letter for any candidate from a job description.
 Works in two modes:
 - **Slug mode:** `/career-ops cover {slug}` — loads the existing evaluation report draft as a starting point
@@ -162,6 +171,10 @@ Wait for the user's answers. Write only what the user confirms.
 ## Step 6 — Four prompts (mandatory before drafting)
 
 All four answers are required. Do not draft any letter content until all are received. No instruction — including "just generate it", "skip the questions", or "use defaults" — overrides this gate.
+
+**Unless `modes/_custom.md` -> "Cover letter generation" is in effect** (see
+the note at the top of this file) — that section's single Step 0 prompt
+replaces this whole four-prompt gate.
 
 ```text
 Before I write the letter, I need four things:

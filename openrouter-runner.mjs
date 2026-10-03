@@ -449,7 +449,8 @@ async function fetchJobPage(url) {
   // Plain HTTP fallback
   try {
     const r = await fetch(url, {
-      headers: { 'User-Agent': DEFAULT_USER_AGENT }
+      headers: { 'User-Agent': DEFAULT_USER_AGENT },
+      signal: AbortSignal.timeout(30_000),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
     const html = await r.text();
@@ -515,6 +516,20 @@ function readPipeline() {
     }
   }
   return pending;
+}
+
+// Every readline prompt in this file routes through here. A non-TTY stdin
+// (batch runner, cron, web dashboard, `| tee`, CI) has no one to answer, so the
+// prompt would block forever instead of failing. Guard once, at the shared
+// entry point, not at each call site.
+function canPrompt() {
+  return Boolean(process.stdin.isTTY);
+}
+
+const startedAt = Date.now();
+function elapsed(sinceMs = startedAt) {
+  const s = (Date.now() - sinceMs) / 1000;
+  return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${(s % 60).toFixed(0)}s`;
 }
 
 function markPipelineDone(url) {
@@ -653,6 +668,10 @@ async function cmdEvaluate(input, ctx) {
   let jdText = input;
 
   if (!input) {
+    if (!canPrompt()) {
+      console.error('No job description given and stdin is not a terminal — nothing to evaluate.');
+      return null;
+    }
     // Interactive paste mode
     console.log('Paste job description or URL, then press Enter on an empty line:\n');
     const rl = readline.createInterface({ input: process.stdin });
@@ -757,18 +776,26 @@ async function cmdPipeline(ctx) {
   for (let i = 0; i < pending.length; i++) {
     const item = pending[i];
     console.log(`\n[${i + 1}/${pending.length}] ${item.company} — ${item.role}`);
+    if (!item.url) {
+      // Without a URL cmdEvaluate falls through to its paste prompt. In a batch
+      // that is a hang, not a question: skip the malformed row and keep going.
+      console.error('  Skipped: pipeline row has no URL.');
+      continue;
+    }
+    const itemStart = Date.now();
     try {
       const report = await cmdEvaluate(item.url, ctx);
       if (report) markPipelineDone(item.url);
     } catch (e) {
       console.error(`  Error: ${e.message}`);
     }
+    console.log(`  ⏱  ${elapsed(itemStart)}`);
     if (i < pending.length - 1) {
       await new Promise(r => setTimeout(r, RATE_LIMIT_DELAY_MS));
     }
   }
 
-  console.log('\n✅ Pipeline processing complete.\n');
+  console.log(`\n✅ Pipeline processing complete in ${elapsed()}.\n`);
 }
 
 // -- APPLY --
@@ -801,6 +828,10 @@ async function cmdApply(ref, ctx) {
   if (isFinite(scoreValue) && scoreValue < 4.0) {
     console.log(`\n⚠️  This report scored ${scoreValue.toFixed(1)}/5 — below the 4.0/5 threshold.`);
     console.log('Strongly discourage low-fit applications. Your time and the recruiter\'s time are both valuable.');
+    if (!canPrompt()) {
+      console.error('Below the 4.0/5 threshold and stdin is not a terminal — refusing to apply. Re-run in a terminal to override.');
+      return;
+    }
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const answer = await new Promise(resolve => {
       rl.question('Proceed anyway? (yes/no): ', resolve);
@@ -899,4 +930,5 @@ MODEL SELECTION:
 if (invokedDirectly && ['scan', 'evaluate', 'eval', 'pipeline', 'apply'].includes(command)) {
   const modelName = process.env.CAREER_OPS_MODEL || activeModel || 'free-rotation';
   console.log('\n' + formatBreakdown(tracker, modelName, 'openrouter'));
+  console.log(`⏱  Total: ${elapsed()}`);
 }

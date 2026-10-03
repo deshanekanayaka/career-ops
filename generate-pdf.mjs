@@ -1047,7 +1047,7 @@ export function enforcePageBudget(pageCount, { maxPages = 2, strictPages = false
  * @param {Buffer} pdfBuffer - PDF bytes returned by Chromium.
  * @returns {number}
  */
-function countRenderedPdfPages(pdfBuffer) {
+export function countRenderedPdfPages(pdfBuffer) {
   const pdf = pdfBuffer.toString('latin1');
   const objects = new Map();
   const objectPattern = /(?:^|[\r\n])(\d+)\s+(\d+)\s+obj\b([\s\S]*?)\bendobj\b/g;

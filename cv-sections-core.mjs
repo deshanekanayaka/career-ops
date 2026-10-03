@@ -126,11 +126,16 @@ const PATTERNS = {
     projects: new RegExp(String.raw`%{4,}\s+PROJECTS\s+%{4,}[\s\S]*?` + TEX_BOUNDARY),
     education: new RegExp(String.raw`%{4,}\s+Education\s+%{4,}[\s\S]*?` + TEX_BOUNDARY),
     awards: new RegExp(String.raw`%{4,}\s+AWARDS\s+%{4,}[\s\S]*?` + TEX_BOUNDARY),
+    // "Additional" is an alternate, template-opt-in rendering of the same kind
+    // of entries as awards (a merged one-line Certifications + Awards & Honors
+    // section) — a distinct payload key so a template can use one or the
+    // other, never both. See ENTRY_FIELD_SPECS.tex.additional.
+    additional: new RegExp(String.raw`%{4,}\s+ADDITIONAL\s+%{4,}[\s\S]*?` + TEX_BOUNDARY),
     skills: new RegExp(String.raw`%{4,}\s+Technical Skills\s+%{4,}[\s\S]*?` + TEX_END_SENTINEL, 'm'),
   },
 };
 
-export const OPTIONAL_SECTIONS = ['competencies', 'experience', 'projects', 'education', 'certifications', 'awards', 'interests', 'skills'];
+export const OPTIONAL_SECTIONS = ['competencies', 'experience', 'projects', 'education', 'certifications', 'awards', 'additional', 'interests', 'skills'];
 
 export function isEmptySection(payload, section) {
   const entries = payload?.[section];

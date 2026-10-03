@@ -218,6 +218,13 @@ Rules:
 
 ---
 
+**Check `modes/_custom.md` -> "Application email — 'why me' length" before
+writing the fit-points section below.** If that override exists, it caps the
+`hr_application`/`cold_application` fit-points section at 3 lines in the
+cover letter's evidence-first style, tightening the 150-250 word target in
+Style Rules for that section only. The rest of this Step 5 structure is
+unaffected.
+
 ## Step 5 — Draft Structure
 
 Always output:

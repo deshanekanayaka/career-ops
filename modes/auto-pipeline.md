@@ -60,7 +60,20 @@ Read `config/profile.yml`. Check `cv.output_format`:
 
 ## Step 4 — Draft Application Answers (only if score >= 4.5)
 
-If the final score is >= 4.5, generate a draft of responses for the application form:
+If the final score is >= 4.5, check how the JD wants the candidate to apply.
+
+**Email-application gate:** if the JD's own text instructs candidates to apply
+by emailing a CV/resume/application to an address, rather than through a
+portal or form (e.g. "send your CV to jobs@...", "apply by email to..."), skip
+the form-drafting steps below and instead run `modes/email.md` (`hr_application`
+variant), sourced from this report. This is JD-driven, distinct from the
+candidate explicitly asking for an email (`modes/email.md`'s own gate) — either
+condition is sufficient to run it. Save the drafted subject + body in the
+report as section `## H) Draft Application Email` instead of `## H) Draft
+Application Answers`. Never send it; draft only, per `modes/email.md`'s
+standing rule.
+
+Otherwise, draft form answers:
 
 1. **Extract form questions**: Use Playwright to navigate to the form and take a snapshot. If they cannot be extracted, use the generic questions.
 2. **Generate responses** following the tone (see below).

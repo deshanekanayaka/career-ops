@@ -10,14 +10,23 @@ Export a tailored, ATS-optimized CV as a `.tex` file and compile it to PDF via `
 4. Extract 15-20 keywords from the JD
 5. Detect JD language → CV language (EN default)
 6. Detect role archetype → adapt framing
-7. Rewrite Professional Summary injecting JD keywords (same rules as `pdf` mode — NEVER invent skills)
-8. Select top 3-4 most relevant projects for the offer, and populate `awards[]` from `cv.md`'s Awards / Honors section when it has entries that support the role (omit the key otherwise — the section is dropped, header included; never invent an award)
+7. Write the tailored headline for `title` (see field reference below) — this template has no Professional Summary block at all, so a JD-retargeted headline under the name is the one summary-shaped element it renders. Distribute the rest of the JD keywords across the project/experience bullets and Skills, same rules as `pdf` mode — NEVER invent skills.
+8. Select top 3-4 most relevant projects for the offer, and populate `awards[]` (or `additional[]`, if the active template renders that instead — check for an `{{ADDITIONAL}}` marker in the resolved `.tex` file) from `cv.md`'s Awards / Honors section when it has entries that support the role (omit the key otherwise — the section is dropped, header included; never invent an award)
 9. Reorder experience bullets by JD relevance
 10. Inject keywords naturally into existing achievements
 11. Build a JSON payload (see schema below) and write to `/tmp/cv-{candidate}-{company}.json`
-12. Run: `node build-cv-latex.mjs /tmp/cv-{candidate}-{company}.json output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex`
-13. Run: `node generate-latex.mjs output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf`
-    *(Replace `{candidate}`, `{company}`, `{YYYY-MM-DD}` with actual values.)*
+12. Run: `node build-cv-latex.mjs /tmp/cv-{candidate}-{company}.json output/{Fname}_{Lname}_{CompanyName}_CV.tex`
+13. Run: `node generate-latex.mjs output/{Fname}_{Lname}_{CompanyName}_CV.tex output/{Fname}_{Lname}_{CompanyName}_CV.pdf`
+
+    **Then deliver it:** `cp output/{Fname}_{Lname}_{CompanyName}_CV.pdf ~/Downloads/` — user house rule, see `modes/_custom.md` -> "Deliver the PDF to ~/Downloads". The `output/` copy stays put; `data/pdf-index.tsv` and `outcome.mjs` depend on it.
+    *(Replace `{candidate}` and `{company}` in the /tmp payload path with actual values.)*
+
+    **Output filenames follow `Fname_Lname_CompanyName_CV`** — first and last name
+    only (no middle name), company in CamelCase with no spaces or punctuation
+    (`Owen Thomas` -> `OwenThomas`), `General` when no company is targeted, and no
+    date. This is a user house rule; `modes/_custom.md` -> "CV/PDF filename
+    convention" is the authority and carries the version/agency edge cases. Do NOT
+    emit the older `cv-{candidate}-{company}-{YYYY-MM-DD}` shape.
 14. Report: .tex path, .pdf path, file sizes, section count, keyword coverage %
 
 **Requires:** `tectonic` (preferred — `brew install tectonic`, auto-downloads packages) or `pdflatex` (MiKTeX / TeX Live) on PATH.
@@ -28,6 +37,18 @@ Export a tailored, ATS-optimized CV as a `.tex` file and compile it to PDF via `
 - **CJK (Japanese / Chinese / Korean) requires the `tectonic` engine.** The base template is a pdfLaTeX / Computer-Modern setup with no CJK font, so `generate-latex.mjs` blocks CJK content on that path with guidance. Tectonic's backend is XeTeX, so `fontspec` + `xeCJK` can render CJK: generate from the CJK-aware variant instead —
   `node build-cv-latex.mjs <input.json> <output.tex> --template=cjk` (uses `templates/cv-template.cjk.tex`) — then run `generate-latex.mjs` as usual. This path needs a XeTeX-based engine (fontspec/xeCJK); a pdflatex-only local setup still gets the blocking guidance, since pdfLaTeX itself can't drive this template regardless of what packages or fonts are present. Font availability is per environment, not a blanket requirement: **locally**, install tectonic and make sure a CJK-capable font is on your system — fontspec/xeCJK read the OS font list, tectonic does not bundle fonts — the template defaults to "Noto Serif CJK SC", swap `\setCJKmainfont{...}` for whatever CJK font you actually have installed if that name isn't found. **On Overleaf**, switch the compiler to XeLaTeX (Menu → Compiler → XeLaTeX) — Overleaf's default pdfLaTeX compiler can't build this file either — and a CJK font may already be available in Overleaf's TeX Live install (e.g. Noto CJK), or you can upload your own font file(s) as project resources if not. If neither a XeTeX engine nor a CJK font is available in your environment, use `pdf` mode (HTML → PDF) instead, which renders CJK via a `lang="ja"` font fallback.
 
+## Available templates
+
+Resolve which `.tex` file to fill the same way `pdf` mode resolves its HTML template: `node cv-templates.mjs resolve cv "<name>"` for a named template, or the bare `node cv-templates.mjs resolve cv` to honor `cv.template` in `config/profile.yml` (falls back to the base `cv-template.tex` when unset). Pass the resolved path to `build-cv-latex.mjs` as `--template=<name>`.
+
+| Name | File | Notes |
+|------|------|-------|
+| (base) | `cv-template.tex` | Letter paper, FontAwesome icons in the header, one row per award. No `title`, `phone`, `location`, `portfolio`, or `additional` slot. |
+| `cjk` | `cv-template.cjk.tex` | XeTeX/tectonic only — see CJK support above. |
+| `clean` | `cv-template.clean.tex` | A4, no icons (plain underlined `\href` links), a tailored headline under the name, a visible link line under each project's tech line, and an "Additional" section that merges `additional[]` into one line instead of one row per award. Uses `phone`/`location` instead of `contact_line`. |
+
+A one-page limit is enforced at compile time, not just in how content is drafted: pass `--max-pages=1 --strict-pages` to `generate-latex.mjs` to reject (rather than warn on) a CV that renders past one page — the same `--max-pages`/`--strict-pages` flags `generate-pdf.mjs` uses on the HTML path, backed by the same page-count check.
+
 ## JSON Input Schema
 
 Write a JSON file with this structure. `build-cv-latex.mjs` handles template merge and LaTeX escaping — no need to escape special characters yourself.
@@ -35,10 +56,14 @@ Write a JSON file with this structure. `build-cv-latex.mjs` handles template mer
 ```json
 {
   "name": "Jane Smith",
+  "title": "Senior Backend Engineer | Distributed Systems",
+  "phone": "+1 415 555 0100",
+  "location": "San Francisco, CA",
   "contact_line": "San Francisco, CA | +1 415 555 0100",
   "email": { "url": "jane@example.com", "display": "jane@example.com" },
   "linkedin": { "url": "https://linkedin.com/in/janesmith", "display": "linkedin.com/in/janesmith" },
   "github": { "url": "https://github.com/janesmith", "display": "github.com/janesmith" },
+  "portfolio": { "url": "https://janesmith.dev", "display": "janesmith.dev" },
   "education": [
     {
       "institution": "University Name",
@@ -73,6 +98,9 @@ Write a JSON file with this structure. `build-cv-latex.mjs` handles template mer
   "awards": [
     { "title": "Gold Medal, International Olympiad in Informatics", "org": "IOI", "year": "2021" }
   ],
+  "additional": [
+    { "title": "Certified Kubernetes Administrator", "org": "CNCF", "year": "2024" }
+  ],
   "skills": [
     { "category": "Languages", "items": "Python, JavaScript, C++" },
     { "category": "Frameworks", "items": "FastAPI, React, PyTorch" }
@@ -85,13 +113,18 @@ Write a JSON file with this structure. `build-cv-latex.mjs` handles template mer
 | Field | Type | Source |
 |-------|------|--------|
 | `name` | string | `profile.yml → candidate.full_name` |
-| `contact_line` | string | Phone / City, State / Visa — built from profile.yml |
+| `title` | string | Optional — a tailored, one-line headline rendered directly under the name (a template must reference `{{TITLE_LINE}}` for this to show; the base and CJK templates do not, the `clean` template does). Blank or absent renders no line at all, not an empty gap |
+| `phone` | string | Optional — separate phone value some templates (e.g. `clean`) place on its own in the header, alongside or instead of `contact_line` |
+| `location` | string | Optional — separate location value, same use as `phone` above |
+| `contact_line` | string | Phone / City, State / Visa, built from profile.yml. The base and CJK templates use this single string for the whole header contact row; `clean` uses `phone` and `location` instead and ignores this field |
 | `email.url` | string | Email for `\href{mailto:...}` (sanitized via sanitizeUrl, not LaTeX-escaped) |
 | `email.display` | string | Display text for the email link |
 | `linkedin.url` | string | Full URL with scheme for `\href{}` (sanitized via sanitizeUrl, not LaTeX-escaped) |
 | `linkedin.display` | string | Display text only (no scheme) |
 | `github.url` | string | Full URL with scheme for `\href{}` (sanitized via sanitizeUrl, not LaTeX-escaped) |
 | `github.display` | string | Display text only (no scheme) |
+| `portfolio.url` | string | Optional — full URL with scheme for `\href{}` (sanitized via sanitizeUrl, not LaTeX-escaped). Only the `clean` template renders it; the base and CJK templates have no portfolio slot |
+| `portfolio.display` | string | Display text only (no scheme) |
 | `education[].institution` | string | From cv.md Education |
 | `education[].location` | string | Institution location |
 | `education[].degree` | string | Degree name |
@@ -106,16 +139,20 @@ Write a JSON file with this structure. `build-cv-latex.mjs` handles template mer
 | `projects[].name` | string | From cv.md Projects |
 | `projects[].context` | string | Tech stack — appears next to project name |
 | `projects[].dates` | string | Date range (or empty) |
+| `projects[].url` | string | Optional project/repo link (sanitized via sanitizeUrl). Rendered as its own visible, underlined line right after the tech-stack line, e.g. `diacify.vercel.app` — never hidden behind the project name |
 | `projects[].bullets` | string[] | Selected project achievements. Supports the same `**…**` emphasis |
 | `awards[].title` | string | Award name, from cv.md Awards / Honors |
 | `awards[].org` | string | Optional — issuing body, rendered after the title |
 | `awards[].year` | string | Optional — year, right-aligned |
+| `additional[].title` | string | Same shape as `awards[]` (`title`/`org`/`year`), rendered instead as one comma-and-`\|`-joined line under an "Additional" heading. Only for a template that references `{{ADDITIONAL}}` — the base and CJK templates do not, so on those the key renders nothing. Use it, not `awards[]`, when a candidate wants certifications and awards folded into one line rather than one row each |
+| `additional[].org` | string | Optional — same meaning as `awards[].org` |
+| `additional[].year` | string | Optional — put the full date here when the candidate wants a month shown (e.g. `"Apr 2026"`), not just a bare year. `year` is free text, not a validated year field |
 | `skills[].category` | string | Optional — skill category name (e.g. "Languages", "Frameworks"). Omitted, the line renders without the bold prefix. |
 | `skills[].items` | string or string[] | **Required** — a non-blank comma-separated string, or a non-empty array of non-blank strings (every element must be text; the builder joins the whole array). |
 
-**The key names above are enforced, not suggestions (#3523).** The payload root must be an object, and before rendering `build-cv-latex.mjs` validates every entry in `education`, `experience`, `projects`, `awards` and `skills`:
+**The key names above are enforced, not suggestions (#3523).** The payload root must be an object, and before rendering `build-cv-latex.mjs` validates every entry in `education`, `experience`, `projects`, `awards`, `additional` and `skills`:
 
-- **Missing or blank required field → hard error, non-zero exit, no .tex written.** Required: `institution` + `degree` for education, `company` + `role` for experience, `name` for projects, `title` for awards, `items` for skills (a non-blank string or a non-empty array of them; `category` stays optional).
+- **Missing or blank required field → hard error, non-zero exit, no .tex written.** Required: `institution` + `degree` for education, `company` + `role` for experience, `name` for projects, `title` for awards and for additional, `items` for skills (a non-blank string or a non-empty array of them; `category` stays optional).
 - **A key no builder reads → warning on stderr and in the report's `warnings[]`;** the build proceeds and the key is ignored.
 - **A top-level section name the builder does not read → warning**, naming the nearest known key, so `educations` for `education` is visible instead of silently dropping the section.
 - **A section this template has no block for → warning.** The `.tex` template renders no `certifications`, `competencies`, `interests` or `summary` — all four exist on the HTML path only. Passing one drops it entirely, so the warning says what was lost. This is the message you get for those four; an unrecognised key gets the typo-style warning above instead, never both.

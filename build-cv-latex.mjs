@@ -90,11 +90,36 @@ function buildExperience(entries) {
   return blocks.join('\n\n');
 }
 
+// Strip the scheme (and a bare trailing slash) from a sanitized URL for
+// display, e.g. "https://diacify.vercel.app/" -> "diacify.vercel.app" — the
+// same convention cv.md itself uses next to a project name. Display-only:
+// the \href target keeps the full sanitized URL untouched.
+function displayUrl(sanitized) {
+  return sanitized.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+}
+
 /**
  * Render the Projects section as \resumeProjectHeading blocks.
  *
- * A valid `url` turns the project name into an \href link (#3198); the name
- * itself stays escaped either way.
+ * The title/date row stays a 2-argument \resumeProjectHeading call — the same
+ * shape every .tex template (base, CJK, or a named template pack) must accept,
+ * since this one function renders projects for all of them. A project's tech
+ * stack (`context`) and link (`url`) share ONE line directly under that row,
+ * joined by "$|$", inside the same \item.
+ *
+ * The link is VISIBLE text, not a bare hyperlink on the project name (#3198
+ * did the latter). That is deliberate and load-bearing: `pdftotext` — and so
+ * an ATS, which is a text parser — extracts none of a PDF's \href targets,
+ * only what is drawn on the page. A link whose URL is not written out is a
+ * link the parser never sees, and a printed CV cannot offer at all. The
+ * display text drops the scheme via `displayUrl()`, matching how cv.md prints
+ * its own project links; `url_display` overrides it when the raw host is long
+ * or meaningless (a generated PaaS hostname, say) and a short label reads
+ * better.
+ *
+ * One line rather than two because each project otherwise spends three lines
+ * before its first bullet, and on a one-page CV those add up to the difference
+ * between fitting at the template's own 11pt and having to compress.
  *
  * @param {Array<object>} entries `projects[]` from the payload
  * @returns {string} LaTeX for the section body, or '' when there is nothing to render
@@ -104,13 +129,24 @@ function buildProjects(entries) {
   const blocks = [];
   for (const e of entries) {
     if (!hasRequiredFields(e, 'projects', 'tex')) continue;
-    const context = e.context ? ` \\emph{$|$ ${escapeLatex(e.context)}}` : '';
     const url = sanitizeUrl(e.url);
-    const nameFormatted = url
-      ? `\\href{${escapeLatex(url, 'url')}}{\\textbf{${escapeLatex(e.name)}}}`
-      : `\\textbf{${escapeLatex(e.name)}}`;
+    // Each part is escaped on its own: `context` is user text, the link is
+    // LaTeX this function emits, so neither can be escaped as a whole.
+    const parts = [];
+    if (hasText(e.context)) parts.push(escapeLatex(e.context));
+    if (url) {
+      const label = hasText(e.url_display) ? e.url_display : displayUrl(url);
+      parts.push(`\\href{${escapeLatex(url, 'url')}}{\\underline{${escapeLatex(label)}}}`);
+    }
+    const metaLine = parts.length
+      ? `      \\textit{\\small ${parts.join(' $|$ ')}} \\\\\n`
+      : '';
     const bullets = Array.isArray(e.bullets) ? e.bullets.map(b => `            \\resumeItem{${escapeLatexBullet(b)}}`).join('\n') : '';
-    blocks.push(`    \\resumeProjectHeading\n      {${nameFormatted}${context}}{${escapeLatex(e.dates || '')}}\n      \\resumeItemListStart\n${bullets}\n      \\resumeItemListEnd`);
+    blocks.push(
+      `    \\resumeProjectHeading\n      {\\textbf{${escapeLatex(e.name)}}}{${escapeLatex(e.dates || '')}}\n` +
+      metaLine +
+      `      \\resumeItemListStart\n${bullets}\n      \\resumeItemListEnd`
+    );
   }
   return blocks.join('\n\n');
 }
@@ -130,6 +166,30 @@ function buildAwards(entries) {
   return blocks.join('\n\n');
 }
 
+/**
+ * Render `additional[]` as ONE joined line: "Title, Org, Year | Title2, ...".
+ *
+ * A template-opt-in alternative to buildAwards() for candidates who want
+ * certifications and awards folded into a single "Additional" line instead of
+ * one row per entry. Uses the same entry shape as awards ({title, org, year})
+ * so the same JSON can be pointed at either builder.
+ *
+ * @param {Array<object>} entries `additional[]` from the payload
+ * @returns {string} LaTeX for a single \resumeItem line, or '' when empty
+ */
+function buildAdditional(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  const parts = entries
+    .filter(e => hasRequiredFields(e, 'additional', 'tex'))
+    .map(e => {
+      const org = e.org ? `, ${escapeLatex(e.org)}` : '';
+      const year = e.year ? `, ${escapeLatex(e.year)}` : '';
+      return `${escapeLatex(e.title)}${org}${year}`;
+    });
+  if (!parts.length) return '';
+  return `      \\resumeItem{${parts.join(' $|$ ')}}`;
+}
+
 function buildSkills(categories) {
   if (!Array.isArray(categories) || categories.length === 0) return '';
   return categories.map(c => {
@@ -141,6 +201,42 @@ function buildSkills(categories) {
     const prefix = hasText(c.category) ? `\\textbf{${escapeLatex(c.category)}}{: }` : '';
     return `        ${prefix}{${escapeLatex(items)}} \\\\`;
   }).filter(Boolean).join('\n');
+}
+
+/**
+ * Render the optional Summary as a whole LaTeX block, or nothing at all.
+ *
+ * Same shape as titleLine: a blank summary must leave no bare `\section` behind,
+ * so this returns the heading AND the text together or an empty string. That is
+ * also why `summary` is absent from OPTIONAL_SECTIONS in cv-sections-core.mjs —
+ * it is a scalar, not an array of entries, so stripEmptySections() (which tests
+ * `Array.isArray`) would treat every summary as empty and strip the block.
+ *
+ * @param {unknown} summary
+ * @returns {string}
+ */
+function buildSummary(summary) {
+  if (!hasText(summary)) return '';
+  // \titleformat already applies \vspace{-5pt} after the section rule (see the
+  // Skills section comment in the template). Every other section absorbs that
+  // with an itemize environment's own top padding; this block has no such
+  // wrapper, so without its own correction the text sits jammed against the
+  // rule with no breathing room (#3520).
+  //
+  // The pair of vspace values below is a deliberate trade, not two
+  // independent settings: this template's one-page budget on a fully
+  // populated CV has essentially no slack (see cv-optional-sections /
+  // generate-latex.mjs's page-count check), so adding room before the text
+  // has to come from removing an equal amount after it. +4pt here (net -1pt
+  // against the rule, versus the un-corrected -5pt) gives a visible gap
+  // matching the other sections' rhythm; -8pt after closes the gap before
+  // the next section's heading to pay for it. Verified empirically: the
+  // overflow is NOT smooth per pt — a whole trailing section (e.g. Skills)
+  // jumps to page 2 once the total budget is exceeded, it does not partially
+  // spill — so if a future edit changes this pair, rebuild a fully populated
+  // CV and check --max-pages=1 --strict-pages, not just that it "looks fine"
+  // with less content.
+  return `\\vspace{-8pt}\n\\section{Summary}\n\\vspace{4pt}\n{\\small ${escapeLatex(summary)}}\n\\vspace{0pt}`;
 }
 
 async function main() {
@@ -183,15 +279,9 @@ async function main() {
     process.exit(1);
   }
 
-  const { errors, warnings } = validatePayload(payload, 'tex');
-  if (errors.length) {
-    console.error('Invalid CV payload:');
-    for (const message of errors) console.error(`  - ${message}`);
-    console.error(JSON.stringify({ valid: false, errors, warnings }, null, 2));
-    process.exit(1);
-  }
-  for (const message of warnings) console.error(`Warning: ${message}`);
-
+  // Resolve and read the template BEFORE validating, so validatePayload can be
+  // told which optional sections this particular variant actually renders.
+  // Both failures are fatal, so which one reports first is cosmetic.
   // Honor a selected .tex template variant (cv.template default or --template=<name>),
   // falling back to the base cv-template.tex when no variant exists.
   const texName = (process.argv.find((a) => a.startsWith('--template=')) || '').split('=')[1];
@@ -209,6 +299,15 @@ async function main() {
 
   let template = await readFile(TEMPLATE_PATH_RESOLVED, 'utf-8');
 
+  const { errors, warnings } = validatePayload(payload, 'tex', { template });
+  if (errors.length) {
+    console.error('Invalid CV payload:');
+    for (const message of errors) console.error(`  - ${message}`);
+    console.error(JSON.stringify({ valid: false, errors, warnings }, null, 2));
+    process.exit(1);
+  }
+  for (const message of warnings) console.error(`Warning: ${message}`);
+
   // Drop the optional sections (projects, education) that have no entries, so
   // an absent one leaves no bare header behind. See cv-sections-core.mjs.
   template = stripEmptySections(template, payload, 'tex');
@@ -219,9 +318,21 @@ async function main() {
   const linkedinDisplay = payload.linkedin?.display || '';
   const githubUrl = sanitizeUrl(payload.github?.url || '');
   const githubDisplay = payload.github?.display || '';
+  const portfolioUrl = sanitizeUrl(payload.portfolio?.url || '');
+  const portfolioDisplay = payload.portfolio?.display || '';
+  // A blank title must leave no empty line behind, so this is a whole LaTeX
+  // fragment (own row + spacing), not a bare value — the same pattern as the
+  // optional email/linkedin/github items above, one level up.
+  const titleLine = hasText(payload.title)
+    ? `\\small \\textbf{${escapeLatex(payload.title)}} \\\\ \\vspace{2pt}\n    `
+    : '';
 
   const substitutions = {
     NAME: escapeLatex(payload.name || ''),
+    TITLE_LINE: titleLine,
+    SUMMARY: buildSummary(payload.summary),
+    PHONE: escapeLatex(payload.phone || ''),
+    LOCATION: escapeLatex(payload.location || ''),
     CONTACT_LINE: escapeLatex(payload.contact_line || ''),
     EMAIL_URL: emailUrl,
     EMAIL_DISPLAY: escapeLatex(emailDisplay),
@@ -229,10 +340,13 @@ async function main() {
     LINKEDIN_DISPLAY: escapeLatex(linkedinDisplay),
     GITHUB_URL: githubUrl,
     GITHUB_DISPLAY: escapeLatex(githubDisplay),
+    PORTFOLIO_URL: portfolioUrl,
+    PORTFOLIO_DISPLAY: escapeLatex(portfolioDisplay),
     EDUCATION: buildEducation(payload.education),
     EXPERIENCE: buildExperience(payload.experience),
     PROJECTS: buildProjects(payload.projects),
     AWARDS: buildAwards(payload.awards),
+    ADDITIONAL: buildAdditional(payload.additional),
     SKILLS: buildSkills(payload.skills),
   };
 
@@ -505,9 +619,17 @@ async function runSelfTest() {
   const linkedinDisplay = sample.linkedin?.display || '';
   const githubUrl = sanitizeUrl(sample.github?.url || '');
   const githubDisplay = sample.github?.display || '';
+  const portfolioUrl = sanitizeUrl(sample.portfolio?.url || '');
+  const portfolioDisplay = sample.portfolio?.display || '';
+  const titleLine = hasText(sample.title)
+    ? `\\small \\textbf{${escapeLatex(sample.title)}} \\\\ \\vspace{2pt}\n    `
+    : '';
 
   const substitutions = {
     NAME: escapeLatex(sample.name),
+    TITLE_LINE: titleLine,
+    PHONE: escapeLatex(sample.phone || ''),
+    LOCATION: escapeLatex(sample.location || ''),
     CONTACT_LINE: escapeLatex(sample.contact_line),
     EMAIL_URL: emailUrl,
     EMAIL_DISPLAY: escapeLatex(emailDisplay),
@@ -515,10 +637,14 @@ async function runSelfTest() {
     LINKEDIN_DISPLAY: escapeLatex(linkedinDisplay),
     GITHUB_URL: githubUrl,
     GITHUB_DISPLAY: escapeLatex(githubDisplay),
+    PORTFOLIO_URL: portfolioUrl,
+    PORTFOLIO_DISPLAY: escapeLatex(portfolioDisplay),
+    SUMMARY: buildSummary(sample.summary),
     EDUCATION: buildEducation(sample.education),
     EXPERIENCE: buildExperience(sample.experience),
     PROJECTS: buildProjects(sample.projects),
     AWARDS: buildAwards(sample.awards),
+    ADDITIONAL: buildAdditional(sample.additional),
     SKILLS: buildSkills(sample.skills),
   };
 

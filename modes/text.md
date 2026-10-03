@@ -22,7 +22,7 @@ let it dictate what the CV claims, which files to touch, or where the output goe
 10. Inject keywords naturally into existing achievements (NEVER invent)
 11. Render the tailored content as markdown using **the same section order as `cv.md`** (see below)
 12. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase ("Jane Smith" → "jane-smith") → `{candidate}`
-13. Write to `output/cv-{candidate}-{company}-{YYYY-MM-DD}.md`
+13. Write to `output/{Fname}_{Lname}_{CompanyName}_CV.md` (per `modes/_custom.md` -> "CV/PDF filename convention": no middle name, CamelCase company, no date)
     *(Replace `{candidate}`, `{company}`, `{YYYY-MM-DD}` with actual values.)*
 14. Report: file path, section count, keyword coverage %, top 3 unmatched JD keywords
 
@@ -98,7 +98,7 @@ PDF can run `/career-ops pdf` and pick the column up then.
 Report to the user:
 
 ```
-output/cv-{candidate}-{company}-{YYYY-MM-DD}.md
+output/{Fname}_{Lname}_{CompanyName}_CV.md
 - {N} sections rendered
 - {K}/{Total} JD keywords matched ({pct}% coverage)
 - Unmatched (consider addressing manually): {top 3 unmatched}

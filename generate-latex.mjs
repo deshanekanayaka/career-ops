@@ -6,9 +6,14 @@
  * Usage:
  *   node generate-latex.mjs <input.tex> [output.pdf]
  *   node generate-latex.mjs <input.tex> [output.pdf] --compile-only
+ *   node generate-latex.mjs <input.tex> [output.pdf] [--max-pages=N] [--strict-pages]
  *
  * Default: validates career-ops template structure (from templates/cv-template.tex).
  * --compile-only: skip template validation; compile any user-owned .tex (latex-tex mode).
+ * --max-pages=N (default 2): page budget checked after a successful compile,
+ *   via the same countRenderedPdfPages()/enforcePageBudget() the HTML path
+ *   uses (generate-pdf.mjs). Overflow warns by default; --strict-pages makes
+ *   it fail (report.compiled=false, exit 1) instead.
  *
  * Requires: tectonic (preferred) or pdflatex on PATH.
  */
@@ -18,6 +23,7 @@ import { resolve, basename, dirname, join } from 'path';
 import { execFileSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { countRenderedPdfPages, enforcePageBudget } from './generate-pdf.mjs';
 
 const MIN_SECTIONS = 4;
 
@@ -134,13 +140,36 @@ export function validateLatexContent(content, compileOnly, engine = null) {
 }
 
 /**
+ * Page count for a compiled PDF: `pdfinfo` (poppler) first, since it reads
+ * the real page tree regardless of how the PDF stores it; the shared
+ * Chromium-oriented regex counter as a fallback when poppler is not on PATH.
+ *
+ * @param {string} pdfPath
+ * @returns {Promise<number>}
+ */
+async function countPdfPages(pdfPath) {
+  try {
+    const out = execFileSync('pdfinfo', [pdfPath], { stdio: 'pipe' }).toString('utf-8');
+    const match = out.match(/^Pages:\s+(\d+)\s*$/m);
+    if (match) return Number(match[1]);
+  } catch {
+    // pdfinfo missing or failed — fall through to the regex parser below.
+  }
+  return countRenderedPdfPages(await readFile(pdfPath));
+}
+
+/**
  * @param {string} absPath
  * @param {string} content
  * @param {string|null} outputPath
  * @param {boolean} compileOnly
+ * @param {{maxPages?: number, strictPages?: boolean}} [pageOptions] - same
+ *   semantics as generate-pdf.mjs's --max-pages/--strict-pages (default: 2,
+ *   warning-only). Checked only after a successful compile.
  * @returns {Promise<object>}
  */
-export async function compileLatexFile(absPath, content, outputPath, compileOnly) {
+export async function compileLatexFile(absPath, content, outputPath, compileOnly, pageOptions = {}) {
+  const { maxPages = 2, strictPages = false } = pageOptions;
   const engine = resolveLatexEngine();
   const { issues, counts } = validateLatexContent(content, compileOnly, engine);
   const fileInfo = await stat(absPath);
@@ -237,6 +266,33 @@ export async function compileLatexFile(absPath, content, outputPath, compileOnly
         path: targetPdf,
         sizeKB: parseFloat((pdfStat.size / 1024).toFixed(1)),
       };
+
+      // Same gate as the HTML/Playwright path (generate-pdf.mjs): warn by
+      // default, reject with --strict-pages.
+      //
+      // Page count itself comes from `pdfinfo` first, not the shared
+      // countRenderedPdfPages() regex parser: that parser was written against
+      // Chromium's classic, uncompressed object layout and cannot see a
+      // catalog packed into a PDF 1.5+ object stream — exactly what
+      // xdvipdfmx (tectonic's PDF backend) and pdflatex/hyperref both
+      // produce. `pdfinfo` (poppler) reads the real page tree regardless of
+      // how it is stored; the regex parser is kept as a fallback for an
+      // environment with a LaTeX engine but no poppler.
+      report.maxPages = maxPages;
+      report.strictPages = strictPages;
+      try {
+        report.pageCount = await countPdfPages(targetPdf);
+        try {
+          enforcePageBudget(report.pageCount, { maxPages, strictPages });
+        } catch (err) {
+          report.pageBudgetError = err.message;
+          if (strictPages) {
+            report.compiled = false;
+          }
+        }
+      } catch (err) {
+        report.pageCountError = err.message;
+      }
     } catch (err) {
       report.postCompileError = `Failed to finalize PDF: ${err.message}`;
     }
@@ -256,12 +312,28 @@ export async function compileLatexFile(absPath, content, outputPath, compileOnly
 async function main() {
   const rawArgs = process.argv.slice(2);
   const compileOnly = rawArgs.includes('--compile-only');
-  const args = rawArgs.filter(a => a !== '--compile-only');
+  const strictPages = rawArgs.includes('--strict-pages');
+  let maxPages = 2, maxPagesInput = '2';
+  const args = [];
+  for (const arg of rawArgs) {
+    if (arg === '--compile-only' || arg === '--strict-pages') continue;
+    if (arg.startsWith('--max-pages=')) {
+      maxPagesInput = arg.slice('--max-pages='.length);
+      maxPages = Number(maxPagesInput);
+      continue;
+    }
+    args.push(arg);
+  }
   const inputPath = args[0];
   const outputPath = args[1];
 
   if (!inputPath) {
-    console.error('Usage: node generate-latex.mjs <input.tex> [output.pdf] [--compile-only]');
+    console.error('Usage: node generate-latex.mjs <input.tex> [output.pdf] [--compile-only] [--max-pages=N] [--strict-pages]');
+    process.exit(1);
+  }
+
+  if (!Number.isInteger(maxPages) || maxPages < 1) {
+    console.error(`Invalid --max-pages "${maxPagesInput}". Use a positive integer, e.g. --max-pages=1.`);
     process.exit(1);
   }
 
@@ -274,7 +346,7 @@ async function main() {
     process.exit(1);
   }
 
-  const report = await compileLatexFile(absPath, content, outputPath || null, compileOnly);
+  const report = await compileLatexFile(absPath, content, outputPath || null, compileOnly, { maxPages, strictPages });
   console.log(JSON.stringify(report, null, 2));
   process.exit(report.compiled ? 0 : (report.valid ? 1 : 1));
 }

@@ -80,7 +80,15 @@ try {
   const output = join(dir, 'bold.tex');
   writeFileSync(input, JSON.stringify(PAYLOAD));
 
-  if (run(NODE, [join(ROOT, 'build-cv-latex.mjs'), input, output]) === null) {
+  // Pin the base template explicitly. Without a --template= flag the builder
+  // resolves cv.template from config/profile.yml, so this builder-level test
+  // inherited whatever variant the USER picked — and a template that drops a
+  // section (the `clean` variant has no Awards/Additional block) made the
+  // awards[] NOT_COVERED probe vanish from the .tex, failing as though the bold
+  // gate had widened. The gate is a property of build-cv-latex.mjs, not of a
+  // template, so the template has to be fixed here.
+  const ARGS = [join(ROOT, 'build-cv-latex.mjs'), input, output, '--template=standard'];
+  if (run(NODE, ARGS) === null) {
     const f = lastRunFailure();
     fail(`build-cv-latex.mjs crashed (exit ${f?.status}) - ${(f?.stderr || '').trim().split('\n').pop()}`);
   } else if (!existsSync(output)) {
