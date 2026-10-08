@@ -34,6 +34,17 @@ const PLACEHOLDER_RE = /\{\{[A-Z_]+\}\}/g;
 const MARKDOWN_BOLD_RE = /\*\*([^*]+?)\*\*/g;
 
 /**
+ * Escaped control sequences (`\textbackslash{}textbf` …) in rendered output:
+ * raw LaTeX the payload carried that will print as literal text.
+ *
+ * @param {string} tex rendered .tex
+ * @returns {string[]} distinct leaked command names, e.g. ['\\textbf']
+ */
+function findLeakedLatex(tex) {
+  return [...new Set([...tex.matchAll(/\\textbackslash\{\}([A-Za-z]+)/g)].map(m => `\\${m[1]}`))];
+}
+
+/**
  * Escape bullet text, then restore markdown bold as \textbf.
  *
  * Use this for every value that ends up inside a \resumeItem; use escapeLatex
@@ -365,6 +376,16 @@ async function main() {
     process.exit(1);
   }
 
+  // The payload is plain text + `**bold**`. Raw LaTeX in it (`\textbf{X}`) is
+  // escaped, not executed, and would print on the page as a literal command —
+  // fail loudly instead of shipping that PDF.
+  const leaked = findLeakedLatex(template);
+  if (leaked.length) {
+    console.error(`Raw LaTeX commands in payload text (would print literally): ${leaked.join(', ')}`);
+    console.error('Use markdown bold (**TypeScript**) instead of \\textbf{TypeScript} in the JSON payload.');
+    process.exit(1);
+  }
+
   if (!existsSync(outDir)) {
     const { mkdirSync } = await import('fs');
     mkdirSync(outDir, { recursive: true });
@@ -587,6 +608,14 @@ async function runSelfTest() {
       console.error(`Self-test failed: education institution ${JSON.stringify(badInstitution)} was accepted as text`);
       process.exit(1);
     }
+  }
+
+  // Raw \textbf in a bullet prints literally; markdown bold does not.
+  const leakedBullet = buildExperience([{ ...sample.experience[0], bullets: ['Used \\textbf{TypeScript}'] }]);
+  if (findLeakedLatex(leakedBullet).join() !== '\\textbf'
+      || findLeakedLatex(buildExperience([{ ...sample.experience[0], bullets: ['Used **TypeScript**'] }])).length) {
+    console.error(`Self-test failed: leaked LaTeX detection is wrong: ${leakedBullet}`);
+    process.exit(1);
   }
 
   // A section the .tex template cannot render must warn rather than vanish:

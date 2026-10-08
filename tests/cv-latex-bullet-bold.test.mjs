@@ -32,9 +32,7 @@ const PAYLOAD = {
     bullets: [
       // Bold applied, and LaTeX specials inside the span still escaped.
       'Cut cold start to **1018 KB** on a **$2M budget & 99.9% uptime**',
-      // Injection probe: a literal \textbf typed by the candidate must stay
-      // inert text rather than becoming a control sequence.
-      'Wrote \\textbf{this} by hand and left 5 * 3 and *single* asterisks alone',
+      'Left 5 * 3 and *single* asterisks alone',
       // An unmatched marker has no closing pair, so it stays literal.
       'Unmatched **marker stays literal',
       // A bold span cannot contain a `*`, so this one matches nothing. Pinned
@@ -109,8 +107,6 @@ try {
       ['coursework renders bold as \\textbf', '\\textbf{Distributed Systems}'],
       // Escaping runs FIRST, so a bold span keeps its \$ \& \% intact.
       ['LaTeX specials inside a bold span stay escaped', '\\textbf{\\$2M budget \\& 99.9\\% uptime}'],
-      // ...and nothing the candidate typed can become a real control sequence.
-      ['a literal \\textbf in payload text stays inert', '\\textbackslash{}textbf\\{this\\}'],
       // Single asterisks are not emphasis.
       ['single asterisks are left alone', '5 * 3 and *single* asterisks'],
       // An odd marker is not emphasis either.
@@ -132,6 +128,22 @@ try {
         ? pass(`${field} is outside the gate and keeps its literal **`)
         : fail(`${field} no longer renders ${JSON.stringify(marker)} literally — the gate widened, so update the field lists in modes/latex.md and modes/pdf.md to match`);
     }
+  }
+
+  // Raw LaTeX in payload text is escaped (never executed), so it would print as
+  // a literal `\textbf{this}` on the page. The builder refuses it instead.
+  const rawInput = join(dir, 'raw.json');
+  const rawOutput = join(dir, 'raw.tex');
+  writeFileSync(rawInput, JSON.stringify({
+    ...PAYLOAD,
+    experience: [{ ...PAYLOAD.experience[0], bullets: ['Wrote \\textbf{this} by hand'] }],
+  }));
+  if (run(NODE, [join(ROOT, 'build-cv-latex.mjs'), rawInput, rawOutput, '--template=standard']) !== null) {
+    fail('a raw \\textbf in payload text was accepted and would print literally');
+  } else {
+    (lastRunFailure()?.stderr || '').includes('Raw LaTeX commands') && !existsSync(rawOutput)
+      ? pass('a raw \\textbf in payload text is refused, not rendered literally')
+      : fail('raw \\textbf was refused for the wrong reason, or a .tex was still written');
   }
 } finally {
   rmSync(dir, { recursive: true, force: true });
